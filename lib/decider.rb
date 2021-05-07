@@ -29,7 +29,7 @@ class Decider
     # trees:,
     # actions:
     params.each_pair do |k, v|
-      debug("#{ k }: #{ v }")
+      debug("#{ k }: #{ v },")
     end
     timeline << params
 
@@ -40,8 +40,19 @@ class Decider
     elsif grow?
       grow = nil
 
-      if
+      if can_afford?(:two_to3) && my_harvestable_trees.size < 2
+        inter = my_size2_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
 
+        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
+      end
+
+      if can_afford?(:one_to2) && my_size2_trees.size < 2
+        inter = my_size1_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
+
+        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
+      end
+
+      grow || "WAIT"
     else
       "WAIT"
     end
@@ -66,11 +77,11 @@ class Decider
       when :harvest
         sun >= 4
       when :two_to3
-        sun >= (7 + my_size2_trees.size)
+        sun >= (7 + my_harvestable_trees.size)
       when :one_to2
-        sun >= (3 + my_size1_trees.size)
+        sun >= (3 + my_size2_trees.size)
       else
-        raise("mode '#{ mode}' not supported")
+        raise("mode '#{ mode }' not supported")
       end
     end
 
@@ -85,19 +96,19 @@ class Decider
 
     # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
     def my_harvestable_trees
-      current_move[:trees].select { |i, t| t[:size] >= 3 }.to_h
+      my_trees.select { |i, t| t[:size] >= 3 }.to_h
     end
 
     def my_size2_trees
-      current_move[:trees].select { |i, t| t[:size] == 2 }.to_h
+      my_trees.select { |i, t| t[:size] == 2 }.to_h
     end
 
     def my_size1_trees
-      current_move[:trees].select { |i, t| t[:size] == 1 }.to_h
+      my_trees.select { |i, t| t[:size] == 1 }.to_h
     end
 
     def my_seeds
-      current_move[:trees].select { |i, t| t[:size] == 0 }.to_h
+      my_trees.select { |i, t| t[:size] == 0 }.to_h
     end
 
     def actions

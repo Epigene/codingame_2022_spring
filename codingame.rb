@@ -40,8 +40,15 @@ class Decider
     elsif grow?
       grow = nil
 
-      if
+      if can_afford?(:two_to3) && my_harvestable_trees.size < 2
+        grow = (my_size2_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions).first
+      end
 
+      if can_afford?(:one_to2) && my_size2_trees.size < 2
+        grow = (my_size1_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions).first
+      end
+
+      grow || "WAIT"
     else
       "WAIT"
     end
@@ -66,11 +73,11 @@ class Decider
       when :harvest
         sun >= 4
       when :two_to3
-        sun >= (7 + my_size2_trees.size)
+        sun >= (7 + my_harvestable_trees.size)
       when :one_to2
-        sun >= (3 + my_size1_trees.size)
+        sun >= (3 + my_size2_trees.size)
       else
-        raise("mode '#{ mode}' not supported")
+        raise("mode '#{ mode }' not supported")
       end
     end
 
