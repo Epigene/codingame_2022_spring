@@ -1,6 +1,8 @@
 class Decider
   attr_reader :world, :timeline
 
+  LAST_DAY = 5 # for wood1, will change
+
   def initialize(world:)
     @world = world
     @timeline = []
@@ -10,9 +12,13 @@ class Decider
   # Updates internal state and returns all moves we can reasonably make today.
   #
   # GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
+  # Growing:
+  #  - size1 -> 2: costs 3 + size 2 trees already owned.
+  #  - size2 -> 3: costs 7 + size 3 trees already owned.
+  #  - size3 -> harvest: 4 points
   #
   # @return [Array<String>]
-  def moves_for_day(daybreak_data)
+  def move(params)
     # day:,
     # nutrients:,
     # sun:,
@@ -22,21 +28,80 @@ class Decider
     # opp_waiting:,
     # trees:,
     # actions:
-    timeline << daybreak_data
+    params.each_pair do |k, v|
+      debug("#{ k }: #{ v }")
+    end
+    timeline << params
 
-    actions.
-      select { |action| action.start_with?("COMPLETE") }.
-      sort_by { |action| action.split(" ").last.to_i }
+    if begin_harvest?
+      actions.
+        select { |action| action.start_with?("COMPLETE") }.
+        min_by { |action| action.split(" ").last.to_i }
+    elsif grow?
+      grow = nil
+
+      if
+
+    else
+      "WAIT"
+    end
   end
 
-  def current_day
+  def current_move
     timeline.last
   end
 
   private
 
+    def begin_harvest?
+      current_move[:day] >= LAST_DAY || my_harvestable_trees.size >= 2 && sun >= 8
+    end
+
+    def grow?
+      my_harvestable_trees.size < 2 && my_size2_trees.size < 2
+    end
+
+    def can_afford?(mode) # :harvest
+      case mode
+      when :harvest
+        sun >= 4
+      when :two_to3
+        sun >= (7 + my_size2_trees.size)
+      when :one_to2
+        sun >= (3 + my_size1_trees.size)
+      else
+        raise("mode '#{ mode}' not supported")
+      end
+    end
+
+    def sun
+      current_move[:sun]
+    end
+
+    # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
+    def my_trees
+      current_move[:trees].select { |i, t| t[:mine] }.to_h
+    end
+
+    # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
+    def my_harvestable_trees
+      current_move[:trees].select { |i, t| t[:size] >= 3 }.to_h
+    end
+
+    def my_size2_trees
+      current_move[:trees].select { |i, t| t[:size] == 2 }.to_h
+    end
+
+    def my_size1_trees
+      current_move[:trees].select { |i, t| t[:size] == 1 }.to_h
+    end
+
+    def my_seeds
+      current_move[:trees].select { |i, t| t[:size] == 0 }.to_h
+    end
+
     def actions
-      current_day[:actions]
+      current_move[:actions]
     end
 end
 
@@ -58,7 +123,7 @@ number_of_cells.times do
   # richness: 0 if the cell is unusable, 1-3 for usable cells
   # neigh_0: the index of the neighbouring cell for each direction
   line = gets
-  debug(line)
+  # debug(line)
   index, richness, neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5 = line.split(" ").map(&:to_i)
 
   world[index] = {
@@ -108,20 +173,20 @@ loop do
     actions << gets.chomp # try printing something from here to start with
   end
 
-  debug("day: #{ day }")
-  debug("nutrients: #{ nutrients }")
-  debug("my sun and score: #{ [sun, score] }")
-  debug("opp sun, score and waiting: #{ [opp_sun, opp_score, opp_waiting] }")
-  debug("trees: #{ number_of_trees }")
-  trees.each_pair do |index, data|
-    debug("tree##{ index }: #{ data }")
-  end
-  debug("actions: #{ number_of_possible_actions }")
-  actions.each do |action|
-    debug(action)
-  end
+  # debug("day: #{ day }")
+  # debug("nutrients: #{ nutrients }")
+  # debug("my sun and score: #{ [sun, score] }")
+  # debug("opp sun, score and waiting: #{ [opp_sun, opp_score, opp_waiting] }")
+  # debug("trees: #{ number_of_trees }")
+  # trees.each_pair do |index, data|
+  #   debug("tree##{ index }: #{ data }")
+  # end
+  # debug("actions: #{ number_of_possible_actions }")
+  # actions.each do |action|
+  #   debug(action)
+  # end
 
-  day_params = {
+  params = {
     day: day, # the game lasts 24 days: 0-23
     nutrients: nutrients,
     sun: sun,
@@ -133,8 +198,6 @@ loop do
     actions: actions
   }
 
-  decider.moves_for_day(day_params).each do |move|
-    puts(move)
-  end
+  puts decider.move(params)
 end
 

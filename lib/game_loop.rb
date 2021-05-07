@@ -37,20 +37,20 @@ loop do
     actions << gets.chomp # try printing something from here to start with
   end
 
-  debug("day: #{ day }")
-  debug("nutrients: #{ nutrients }")
-  debug("my sun and score: #{ [sun, score] }")
-  debug("opp sun, score and waiting: #{ [opp_sun, opp_score, opp_waiting] }")
-  debug("trees: #{ number_of_trees }")
-  trees.each_pair do |index, data|
-    debug("tree##{ index }: #{ data }")
-  end
-  debug("actions: #{ number_of_possible_actions }")
-  actions.each do |action|
-    debug(action)
-  end
+  # debug("day: #{ day }")
+  # debug("nutrients: #{ nutrients }")
+  # debug("my sun and score: #{ [sun, score] }")
+  # debug("opp sun, score and waiting: #{ [opp_sun, opp_score, opp_waiting] }")
+  # debug("trees: #{ number_of_trees }")
+  # trees.each_pair do |index, data|
+  #   debug("tree##{ index }: #{ data }")
+  # end
+  # debug("actions: #{ number_of_possible_actions }")
+  # actions.each do |action|
+  #   debug(action)
+  # end
 
-  day_params = {
+  params = {
     day: day, # the game lasts 24 days: 0-23
     nutrients: nutrients,
     sun: sun,
@@ -62,7 +62,5 @@ loop do
     actions: actions
   }
 
-  decider.moves_for_day(day_params).each do |move|
-    puts(move)
-  end
+  puts decider.move(params)
 end
