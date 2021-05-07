@@ -1,176 +1,140 @@
-require "set"
-require 'benchmark'
+class Decider
+  attr_reader :world, :timeline
 
-STDOUT.sync = true # DO NOT REMOVE
-
-def debug(message)
-  STDERR.puts message
-end
-
-# Implements a directionless and weightless graph structure with named nodes
-class Graph
-  # Key data storage.
-  # Each key is a node (key == name),
-  # and the value set represents the neighbouring nodes.
-  # private attr_reader :structure
-
-  def initialize
-    @structure =
-      Hash.new do |hash, key|
-        hash[key] = {outgoing: Set.new, incoming: Set.new}
-      end
+  def initialize(world:)
+    @world = world
+    @timeline = []
   end
 
-  # A shorthand access to underlying has node structure
-  def [](node)
-    structure[node]
-  end
-
-  def nodes
-    structure.keys
-  end
-
-  # adds a bi-directional connection between two nodes
-  def connect_nodes_bidirectionally(node1, node2)
-    structure[node1][:incoming] << node2
-    structure[node1][:outgoing] << node2
-
-    structure[node2][:incoming] << node1
-    structure[node2][:outgoing] << node1
-
-    nil
-  end
-
-  # Severs all connections to and from this node
-  # @return [nil]
-  def remove_node(node)
-    structure[node][:incoming].each do |other_node|
-      structure[other_node][:outgoing] -= [node]
-    end
-
-    structure.delete(node)
-
-    nil
-  end
-
-  # @root/@destination [String] # "1, 4"
+  # Takes in all data known at daybreak.
+  # Updates internal state and returns all moves we can reasonably make today.
   #
-  # @return [Array, nil] # will return an array of nodes from root to destination, or nil if no path exists
-  def dijkstra_shortest_path(root, destination)
-    # When we choose the arbitrary starting parent node we mark it as visited by changing its state in the 'visited' structure.
-    visited = Set.new([root])
+  # GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
+  #
+  # @return [Array<String>]
+  def moves_for_day(daybreak_data)
+    # day:,
+    # nutrients:,
+    # sun:,
+    # score:,
+    # opp_sun:,
+    # opp_score:,
+    # opp_waiting:,
+    # trees:,
+    # actions:
+    timeline << daybreak_data
 
-    parent_node_list = {root => nil}
+    actions.
+      select { |action| action.start_with?("COMPLETE") }.
+      sort_by { |action| action.split(" ").last.to_i }
+  end
 
-    # Then, after changing its value from FALSE to TRUE in the "visited" hash, we’d enqueue it.
-    queue = [root]
-
-    # Next, when dequeing the vertex, we need to examine its neighboring nodes, and iterate (loop) through its adjacent linked list.
-    loop do
-      dequeued_node = queue.shift
-      # debug "dequed '#{ dequeued_node }', remaining queue: '#{ queue }'"
-
-      if dequeued_node.nil?
-        return
-        # raise("Queue is empty, but destination not reached!")
-      end
-
-      neighboring_nodes = structure[dequeued_node][:outgoing]
-      # debug "neighboring_nodes for #{ dequeued_node }: '#{ neighboring_nodes }'"
-
-      neighboring_nodes.each do |node|
-        # If either of those neighboring nodes hasn’t been visited (doesn’t have a state of TRUE in the “visited” array),
-        # we mark it as visited, and enqueue it.
-        next if visited.include?(node)
-
-        visited << node
-        parent_node_list[node] = dequeued_node
-
-        # debug "parents: #{ parent_node_list }"
-
-        if node == destination
-          # destination reached
-          path = [node]
-
-          loop do
-            parent_node = parent_node_list[path[0]]
-
-            return path if parent_node.nil?
-
-            path.unshift(parent_node)
-            # debug "path after update: #{ path }"
-          end
-        else
-          queue << node
-        end
-      end
-    end
+  def current_day
+    timeline.last
   end
 
   private
 
-    def structure
-      @structure
-    end
-
-    def initialize_copy(copy)
-      dupped_structure =
-        structure.each_with_object({}) do |(k, v), mem|
-          mem[k] =
-            v.each_with_object({}) do |(sk, sv), smem|
-              smem[sk] = sv.dup
-            end
-        end
-
-      copy.instance_variable_set("@structure", dupped_structure)
-
-      super
+    def actions
+      current_day[:actions]
     end
 end
 
-#== Game start
-width, height, my_id = gets.split(" ").map { |x| x.to_i }
-lines = []
+require "set"
+require "benchmark"
 
-height.times do
-  lines << gets.chomp.split("")
+STDOUT.sync = true # DO NOT REMOVE
+
+def debug(message)
+  STDERR.puts(message)
 end
 
-map = Map.new(*lines)
-# debug("map came out as:\n#{ map.inspect }")
+number_of_cells = gets.to_i # 37
 
-graph = GridMatrixToGraph.new(map, minimum_neighbors: MINIMUM_NEIGHBORS).call
-# debug "Graph structure is:\n#{ graph.send(:structure) }"
+world = {}
 
-full_graph = GridMatrixToGraph.new(map).call
-# debug "FullGraph structure is:\n#{ full_graph.send(:structure) }"
+number_of_cells.times do
+  # index: 0 is the center cell, the next cells spiral outwards
+  # richness: 0 if the cell is unusable, 1-3 for usable cells
+  # neigh_0: the index of the neighbouring cell for each direction
+  line = gets
+  debug(line)
+  index, richness, neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5 = line.split(" ").map(&:to_i)
 
-debug("Starting path precrunch..")
-long_path_150 = LongPathFinder.new(map, full_graph).call
-debug("Long path came out as #{ long_path_150 }")
+  world[index] = {
+    r: richness
+    # TODO, handle neighbours binding.pry
+  }
+end
 
-# Starting cell
-start_node = long_path_150.first #=> [0, 0]
-puts "#{start_node[0]} #{start_node[1]}"
+decider = Decider.new(world: world)
 
-captain = Captain.new(
-  *start_node,
-  map: map, graph: graph, full_graph: full_graph,
-  long_path: long_path_150
-)
-#== Game start end
+timeline = {}
 
 loop do
-  x, y, my_life, opp_life, torpedo_cooldown, sonar_cooldown, silence_cooldown, mine_cooldown = gets.split(" ").map(&:to_i)
+  day = gets.to_i # the game lasts 24 days: 0-23
+  nutrients = gets.to_i # the base score you gain from the next COMPLETE action
+  # sun: your sun points
+  # score: your current score
+  sun, score = gets.split(" ").map(&:to_i)
+  # opp_sun: opponent's sun points
+  # opp_score: opponent's score
+  # opp_is_waiting: whether your opponent is asleep until the next day
+  opp_sun, opp_score, opp_waiting = gets.split(" ")
+  opp_sun = opp_sun.to_i
+  opp_score = opp_score.to_i
+  opp_waiting = opp_waiting.to_i == 1
 
-  sonar_result = gets.chomp
-  opponent_orders = gets.chomp
+  number_of_trees = gets.to_i # the current amount of trees
 
-  puts captain.orders(
-    x, y,
-    my_life, opp_life,
-    torpedo_cooldown, sonar_cooldown, silence_cooldown, mine_cooldown,
-    sonar_result,
-    opponent_orders
-  )
+  trees = {}
+  number_of_trees.times do
+    # cell_index: location of this tree
+    # size: size of this tree: 0-3
+    # is_mine: 1 if this is your tree
+    # is_dormant: 1 if this tree is dormant
+    cell_index, size, is_mine, is_dormant = gets.split(" ")
+    cell_index = cell_index.to_i
+    size = size.to_i
+    is_mine = is_mine.to_i == 1
+    is_dormant = is_dormant.to_i == 1
+    trees[cell_index] = {size: size, mine: is_mine, dormant: is_dormant}
+  end
+
+  number_of_possible_actions = gets.to_i # all legal actions
+
+  actions = Set.new
+  number_of_possible_actions.times do
+    actions << gets.chomp # try printing something from here to start with
+  end
+
+  debug("day: #{ day }")
+  debug("nutrients: #{ nutrients }")
+  debug("my sun and score: #{ [sun, score] }")
+  debug("opp sun, score and waiting: #{ [opp_sun, opp_score, opp_waiting] }")
+  debug("trees: #{ number_of_trees }")
+  trees.each_pair do |index, data|
+    debug("tree##{ index }: #{ data }")
+  end
+  debug("actions: #{ number_of_possible_actions }")
+  actions.each do |action|
+    debug(action)
+  end
+
+  day_params = {
+    day: day, # the game lasts 24 days: 0-23
+    nutrients: nutrients,
+    sun: sun,
+    score: score,
+    opp_sun: opp_sun,
+    opp_score: opp_score,
+    opp_waiting: opp_waiting,
+    trees: trees,
+    actions: actions
+  }
+
+  decider.moves_for_day(day_params).each do |move|
+    puts(move)
+  end
 end
+

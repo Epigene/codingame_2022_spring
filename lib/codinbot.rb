@@ -2,6 +2,7 @@
 
 require "codinbot/version"
 require "graph"
+require "decider"
 
 module Codinbot
   class Error < StandardError; end

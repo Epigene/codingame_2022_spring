@@ -12,8 +12,10 @@ output_path = Pathname.new("./codingame.rb")
 
 File.open(output_path, "w") do |file|
   File.readlines(concatenable_file_list_path).each do |addable_file_path|
-    contents = File.read(Pathname.new("./#{ addable_file_path.chomp }"))
+    addable_path = addable_file_path.chomp
+    next if addable_path.to_s == ""
 
+    contents = File.read(Pathname.new("./#{ addable_file_path.chomp }"))
     file.write("#{ contents }\n")
   end
 end
