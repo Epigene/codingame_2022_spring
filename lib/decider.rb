@@ -36,7 +36,8 @@ class Decider
     if begin_harvest?
       actions.
         select { |action| action.start_with?("COMPLETE") }.
-        min_by { |action| action.split(" ").last.to_i }
+        min_by { |action| action.split(" ").last.to_i } ||
+          "WAIT hump, nothing to harvest"
     elsif grow?
       grow = nil
 
@@ -69,7 +70,7 @@ class Decider
     end
 
     def grow?
-      my_harvestable_trees.size < 2 && my_size2_trees.size < 2
+      my_harvestable_trees.size < 2 # && my_size2_trees.size < 2
     end
 
     def can_afford?(mode) # :harvest

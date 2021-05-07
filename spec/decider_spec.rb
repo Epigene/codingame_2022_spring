@@ -90,5 +90,34 @@ RSpec.describe Decider do
         is_expected.to eq("GROW 25")
       end
     end
+
+    context "when it's wood1, and we should grow first 2->3 after having two 2s" do
+      let(:params) do
+        {
+          day: 2,
+          nutrients: 20,
+          sun: 8,
+          score: 0,
+          opp_sun: 8,
+          opp_score: 0,
+          opp_waiting: false,
+          trees: {
+            7=>{:size=>2, :mine=>true, :dormant=>false},
+            9=>{:size=>1, :mine=>false, :dormant=>false},
+            13=>{:size=>2, :mine=>false, :dormant=>false},
+            15=>{:size=>2, :mine=>true, :dormant=>false},
+            24=>{:size=>2, :mine=>false, :dormant=>false},
+            26=>{:size=>1, :mine=>true, :dormant=>false},
+            33=>{:size=>1, :mine=>true, :dormant=>false},
+            35=>{:size=>1, :mine=>false, :dormant=>false}
+          },
+          actions: ["WAIT", "GROW 7", "GROW 15", "GROW 26", "GROW 33"].to_set,
+        }
+      end
+
+      it "opts to grow the lowest-id size 1 tree" do
+        is_expected.to eq("GROW 7")
+      end
+    end
   end
 end

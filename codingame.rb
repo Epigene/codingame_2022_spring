@@ -29,23 +29,28 @@ class Decider
     # trees:,
     # actions:
     params.each_pair do |k, v|
-      debug("#{ k }: #{ v }")
+      debug("#{ k }: #{ v },")
     end
     timeline << params
 
     if begin_harvest?
       actions.
         select { |action| action.start_with?("COMPLETE") }.
-        min_by { |action| action.split(" ").last.to_i }
+        min_by { |action| action.split(" ").last.to_i } ||
+          "WAIT hump, nothing to harvest"
     elsif grow?
       grow = nil
 
       if can_afford?(:two_to3) && my_harvestable_trees.size < 2
-        grow = (my_size2_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions).first
+        inter = my_size2_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
+
+        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
       end
 
       if can_afford?(:one_to2) && my_size2_trees.size < 2
-        grow = (my_size1_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions).first
+        inter = my_size1_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
+
+        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
       end
 
       grow || "WAIT"
@@ -65,7 +70,7 @@ class Decider
     end
 
     def grow?
-      my_harvestable_trees.size < 2 && my_size2_trees.size < 2
+      my_harvestable_trees.size < 2 # && my_size2_trees.size < 2
     end
 
     def can_afford?(mode) # :harvest
@@ -92,19 +97,19 @@ class Decider
 
     # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
     def my_harvestable_trees
-      current_move[:trees].select { |i, t| t[:size] >= 3 }.to_h
+      my_trees.select { |i, t| t[:size] >= 3 }.to_h
     end
 
     def my_size2_trees
-      current_move[:trees].select { |i, t| t[:size] == 2 }.to_h
+      my_trees.select { |i, t| t[:size] == 2 }.to_h
     end
 
     def my_size1_trees
-      current_move[:trees].select { |i, t| t[:size] == 1 }.to_h
+      my_trees.select { |i, t| t[:size] == 1 }.to_h
     end
 
     def my_seeds
-      current_move[:trees].select { |i, t| t[:size] == 0 }.to_h
+      my_trees.select { |i, t| t[:size] == 0 }.to_h
     end
 
     def actions
