@@ -8,11 +8,13 @@ class WorldInitializer
 
   # @return [Graph]
   def call
-    world_graph = Graph.new
+    world_graph = ::Graph.new
 
     to_delete = []
 
     lines.each do |line|
+      debug("\"#{ line }\",")
+
       index, richness, neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5 = line.split(" ").map(&:to_i)
       neighbors = [neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5]
 

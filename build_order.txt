@@ -1,5 +1,6 @@
-lib/world_initializer.rb
+lib/graph.rb
 lib/decider.rb
+lib/world_initializer.rb
 lib/game_header.rb
 lib/game_init.rb
 lib/game_loop.rb
