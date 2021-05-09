@@ -1,8 +1,9 @@
 class Decider
   attr_reader :world, :timeline
 
-  LAST_DAY = 5 # for wood1, will change
+  LAST_DAY = 23
 
+  # @world [Graph]
   def initialize(world:)
     @world = world
     @timeline = []
@@ -38,6 +39,10 @@ class Decider
         select { |action| action.start_with?("COMPLETE") }.
         min_by { |action| action.split(" ").last.to_i } ||
           "WAIT hump, nothing to harvest"
+    elsif plant?
+      # plant_moving_to_center
+
+      binding.pry
     elsif grow?
       grow = nil
 
@@ -73,6 +78,14 @@ class Decider
       my_harvestable_trees.size < 2 # && my_size2_trees.size < 2
     end
 
+    def plant?
+      # for first days do nothing but seed
+      return true if current_move[:day] <= 18 && first_seed_action
+      return false if current_move[:day] >= LAST_DAY - 3
+
+      false # or true?
+    end
+
     def can_afford?(mode) # :harvest
       case mode
       when :harvest
@@ -81,6 +94,8 @@ class Decider
         sun >= (7 + my_harvestable_trees.size)
       when :one_to2
         sun >= (3 + my_size2_trees.size)
+      when :plant
+        sun >= my_seeds.size
       else
         raise("mode '#{ mode }' not supported")
       end
@@ -112,7 +127,13 @@ class Decider
       my_trees.select { |i, t| t[:size] == 0 }.to_h
     end
 
+    # @return [Set]
     def actions
       current_move[:actions]
+    end
+
+    # @return [String, nil] # use presence as indicator that seeding can take place
+    def first_seed_action
+      actions.find { |a| a.start_with?("SEED") }
     end
 end

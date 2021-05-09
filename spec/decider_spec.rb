@@ -119,5 +119,30 @@ RSpec.describe Decider do
         is_expected.to eq("GROW 7")
       end
     end
+
+    context "when it's bronze and the best move is seed towards center, but no center hexes are possible" do
+      let(:params) do
+        {
+          day: 0,
+          nutrients: 20,
+          sun: 2,
+          score: 0,
+          opp_sun: 2,
+          opp_score: 0,
+          opp_waiting: false,
+          trees: {
+            23=>{:size=>1, :mine=>false, :dormant=>false},
+            26=>{:size=>1, :mine=>true, :dormant=>false},
+            32=>{:size=>1, :mine=>true, :dormant=>false},
+            35=>{:size=>1, :mine=>false, :dormant=>false}
+          },
+          actions: ["WAIT", "SEED 32 16", "SEED 26 12", "SEED 26 11", "SEED 26 27", "SEED 32 15", "SEED 26 25", "SEED 32 33", "SEED 32 31"].to_set,
+        }
+      end
+
+      it "prefers seeeding such that two center hexes are adjacent to the seed" do
+        is_expected.to eq("SEED 26 12")
+      end
+    end
   end
 end

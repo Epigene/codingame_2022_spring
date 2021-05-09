@@ -5,11 +5,18 @@ class Graph
   # and the value set represents the neighbouring nodes.
   # private attr_reader :structure
 
-  def initialize
+  attr_reader :structure
+
+  # @nodes [Array]
+  def initialize(nodes=[])
     @structure =
       Hash.new do |hash, key|
         hash[key] = {outgoing: Set.new, incoming: Set.new}
       end
+
+    nodes.each do |node|
+      structure[node] = {outgoing: Set.new, incoming: Set.new}
+    end
   end
 
   # A shorthand access to underlying has node structure
@@ -28,6 +35,18 @@ class Graph
 
     structure[node2][:incoming] << node1
     structure[node2][:outgoing] << node1
+
+    nil
+  end
+
+  def ensure_bidirectional_connection!(node1, node2)
+    d1 = structure[node1]
+    d1[:incoming] << node2 unless d1[:incoming].include?(node2)
+    d1[:outgoing] << node2 unless d1[:outgoing].include?(node2)
+
+    d2 = structure[node2]
+    d2[:incoming] << node1 unless d2[:incoming].include?(node1)
+    d2[:outgoing] << node1 unless d2[:outgoing].include?(node1)
 
     nil
   end
@@ -99,10 +118,6 @@ class Graph
   end
 
   private
-
-    def structure
-      @structure
-    end
 
     def initialize_copy(copy)
       dupped_structure =

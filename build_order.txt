@@ -1,3 +1,4 @@
+lib/world_initializer.rb
 lib/decider.rb
 lib/game_header.rb
 lib/game_init.rb
