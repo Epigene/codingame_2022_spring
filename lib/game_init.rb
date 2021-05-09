@@ -10,6 +10,4 @@ number_of_cells.times do
   lines << gets
 end
 
-debug(lines)
-
-decider = Decider.new(world: world_graph)
+decider = Decider.new(world: WorldInitializer.new(lines).call)

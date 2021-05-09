@@ -24,6 +24,10 @@ class Graph
     structure[node]
   end
 
+  def []=(node, value)
+    structure[node] = value
+  end
+
   def nodes
     structure.keys
   end

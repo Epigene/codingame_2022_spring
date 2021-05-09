@@ -1,8 +1,34 @@
+class WorldInitializer
+  attr_reader :lines
+
+  def initialize(lines)
+    @lines = lines
+  end
+
+  # @return [Graph]
+  def call
+    world_graph = Graph.new
+
+    lines.each do |line|
+      index, richness, neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5 = line.split(" ").map(&:to_i)
+      neighbors = [neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5]
+
+      neighbors.each do |neigh|
+        world_graph.ensure_bidirectional_connection!(index, neigh)
+        world_graph[i][:r] = richness
+      end
+    end
+
+    world_graph
+  end
+end
+
 class Decider
   attr_reader :world, :timeline
 
-  LAST_DAY = 5 # for wood1, will change
+  LAST_DAY = 23
 
+  # @world [Graph]
   def initialize(world:)
     @world = world
     @timeline = []
@@ -38,6 +64,10 @@ class Decider
         select { |action| action.start_with?("COMPLETE") }.
         min_by { |action| action.split(" ").last.to_i } ||
           "WAIT hump, nothing to harvest"
+    elsif plant?
+      # plant_moving_to_center
+
+      binding.pry
     elsif grow?
       grow = nil
 
@@ -73,6 +103,14 @@ class Decider
       my_harvestable_trees.size < 2 # && my_size2_trees.size < 2
     end
 
+    def plant?
+      # for first days do nothing but seed
+      return true if current_move[:day] <= 18 && first_seed_action
+      return false if current_move[:day] >= LAST_DAY - 3
+
+      false # or true?
+    end
+
     def can_afford?(mode) # :harvest
       case mode
       when :harvest
@@ -81,6 +119,8 @@ class Decider
         sun >= (7 + my_harvestable_trees.size)
       when :one_to2
         sun >= (3 + my_size2_trees.size)
+      when :plant
+        sun >= my_seeds.size
       else
         raise("mode '#{ mode }' not supported")
       end
@@ -112,8 +152,14 @@ class Decider
       my_trees.select { |i, t| t[:size] == 0 }.to_h
     end
 
+    # @return [Set]
     def actions
       current_move[:actions]
+    end
+
+    # @return [String, nil] # use presence as indicator that seeding can take place
+    def first_seed_action
+      actions.find { |a| a.start_with?("SEED") }
     end
 end
 
@@ -130,21 +176,17 @@ number_of_cells = gets.to_i # 37
 
 world = {}
 
+lines = []
 number_of_cells.times do
   # index: 0 is the center cell, the next cells spiral outwards
   # richness: 0 if the cell is unusable, 1-3 for usable cells
   # neigh_0: the index of the neighbouring cell for each direction
-  line = gets
-  # debug(line)
-  index, richness, neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5 = line.split(" ").map(&:to_i)
-
-  world[index] = {
-    r: richness
-    # TODO, handle neighbours binding.pry
-  }
+  lines << gets
 end
 
-decider = Decider.new(world: world)
+debug(lines)
+
+decider = Decider.new(world: world_graph)
 
 timeline = {}
 
