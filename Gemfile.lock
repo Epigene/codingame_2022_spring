@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    codinbot (0.1.0)
+    codinbot (1)
 
 GEM
   remote: https://rubygems.org/

@@ -1,8 +1,6 @@
-require_relative 'lib/codinbot/version'
-
 Gem::Specification.new do |spec|
   spec.name          = "codinbot"
-  spec.version       = Codinbot::VERSION
+  spec.version       = 1
   spec.authors       = ["Epigene"]
   spec.email         = ["augusts.bautra@gmail.com"]
 
@@ -23,4 +21,5 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_development_dependency "pry", "~> 0.12"
+  spec.add_development_dependency "rspec", "~> 3.11"
 end

@@ -1,3 +1,4 @@
+# Created at 2022-04-24 14:39:53 +0300 
 # Implements a directionless and weightless graph structure with named nodes
 class Graph
   # Key data storage.
@@ -60,6 +61,7 @@ class Graph
   def remove_node(node)
     structure[node][:incoming].each do |other_node|
       structure[other_node][:outgoing] -= [node]
+      structure[other_node][:incoming] -= [node]
     end
 
     structure.delete(node)
@@ -138,183 +140,165 @@ class Graph
     end
 end
 
+# Implements 2d navigation helpers
+module Locator
+  # @params thing [Hash] # must have :x and :y keys
+  def self.distance_to_base(thing, base_x: BASE_X, base_y: BASE_Y)
+    dist_x = (thing[:x] - base_x).abs
+    dist_y = (thing[:y] - base_y).abs
+
+    Math.sqrt((dist_x**2) + (dist_y**2)).round
+  end
+
+  # @params threat [Hash] # must have
+  def self.destination(threat)
+    [threat[:x] + threat[:vx], threat[:y] + threat[:vy]]
+  end
+end
+
+# The Decider
 class Decider
-  attr_reader :world, :timeline
-
-  LAST_DAY = 23
-
   # @world [Graph]
-  def initialize(world:)
-    @world = world
-    @timeline = []
+  def initialize
   end
 
-  # Takes in all data known at daybreak.
-  # Updates internal state and returns all moves we can reasonably make today.
-  #
-  # GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
-  # Growing:
-  #  - size1 -> 2: costs 3 + size 2 trees already owned.
-  #  - size2 -> 3: costs 7 + size 3 trees already owned.
-  #  - size3 -> harvest: 4 points
-  #
+  # @param step_info [Hash]
+  #  health: my_health, mana: my_mana, opp_health: opp_health, opp_mana: opp_mana, lines: lines
   # @return [Array<String>]
-  def move(params)
-    # day:,
-    # nutrients:,
-    # sun:,
-    # score:,
-    # opp_sun:,
-    # opp_score:,
-    # opp_waiting:,
-    # trees:,
-    # actions:
-    params.each_pair do |k, v|
-      debug("#{ k }: #{ v },")
-    end
-    timeline << params
+  def call(step_info)
+    update_gamestate!(step_info)
 
-    if begin_harvest?
-      actions.
-        select { |action| action.start_with?("COMPLETE") }.
-        min_by { |action| action.split(" ").last.to_i } ||
-          "WAIT hump, nothing to harvest"
-    elsif plant?
-      # plant_moving_to_center
-
-      binding.pry
-    elsif grow?
-      grow = nil
-
-      if can_afford?(:two_to3) && my_harvestable_trees.size < 2
-        inter = my_size2_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
-
-        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
-      end
-
-      if can_afford?(:one_to2) && my_size2_trees.size < 2
-        inter = my_size1_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
-
-        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
-      end
-
-      grow || "WAIT"
+    if threats.any?
+      focus_on_closest_threat!
     else
-      "WAIT"
+      camp_at_mound!
     end
   end
 
-  def current_move
-    timeline.last
+  def update_gamestate!(step_info)
+    timeline << step_info
+    @monsters = {}
+    @threats = []
+
+    update_heroes!
+    update_monsters!
   end
 
   private
 
-    def begin_harvest?
-      current_move[:day] >= LAST_DAY || my_harvestable_trees.size >= 2 && sun >= 8
+  # @return [Array<String>]
+  def focus_on_closest_threat!
+    closest_threat_destination = Locator.destination(threats[0])
+
+    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
+      mem << "MOVE #{closest_threat_destination[0]} #{closest_threat_destination[1]}"
     end
+  end
 
-    def grow?
-      my_harvestable_trees.size < 2 # && my_size2_trees.size < 2
+  # @return [Array<String>]
+  def camp_at_mound!
+    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
+      mem << "MOVE #{mound[0]} #{mound[1]}"
     end
+  end
 
-    def plant?
-      # for first days do nothing but seed
-      return true if current_move[:day] <= 18 && first_seed_action
-      return false if current_move[:day] >= LAST_DAY - 3
+  def params
+    timeline.last
+  end
 
-      false # or true?
-    end
+  def lines
+    params[:lines]
+  end
 
-    def can_afford?(mode) # :harvest
-      case mode
-      when :harvest
-        sun >= 4
-      when :two_to3
-        sun >= (7 + my_harvestable_trees.size)
-      when :one_to2
-        sun >= (3 + my_size2_trees.size)
-      when :plant
-        sun >= my_seeds.size
-      else
-        raise("mode '#{ mode }' not supported")
+  def update_heroes!
+    # lines.each do |line|
+    # end
+
+    # id: Unique identifier
+    # type: 0=monster, 1=your hero, 2=opponent hero
+    # x: Position of this entity
+    # shield_life: Ignore for this league; Count down until shield spell fades
+    # is_controlled: Ignore for this league; Equals 1 when this entity is under a control spell
+    # health: Remaining health of this monster
+    # vx/y: Trajectory of this monster
+    # near_base: 0=monster with no target yet, 1=monster targeting a base
+    # threat_for: Given this monster's trajectory, is it a threat to 1=your base, 2=your opponent's base, 0=neither
+
+    # id, type, x, y, shield_life, is_controlled, health, vx, vy, near_base, threat_for = line.split(" ").collect { |x| x.to_i }
+  end
+
+  MONSTER_LINE_REGEX = %r'^\d+ 0'.freeze
+
+  def update_monsters!
+    lines.cycle(1) do |line|
+      next unless line.match?(MONSTER_LINE_REGEX)
+
+      id, _type, x, y, shield, is_controlled, health, vx, vy, near_base, threat_for = line.split.map(&:to_i)
+
+      data = {
+        id: id,
+        x: x,
+        y: y,
+        shield: shield,
+        is_controlled: is_controlled,
+        health: health,
+        vx: vx,
+        vy: vy,
+        near_base: near_base,
+        threat_for: threat_for
+      }
+
+      monsters[id] = data
+
+      if threat_for == 1
+        index =
+          threats.bsearch_index do |middle_threat, _|
+            Locator.distance_to_base(middle_threat) > Locator.distance_to_base(data)
+          end
+
+        index = -1 if index.nil?
+
+        threats.insert(index, data)
       end
     end
+  end
 
-    def sun
-      current_move[:sun]
-    end
+  def monsters
+    @monsters ||= {}
+  end
 
-    # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
-    def my_trees
-      current_move[:trees].select { |i, t| t[:mine] }.to_h
-    end
+  # monsters who actually move towards the base, sorted ascending by distance from the base
+  def threats
+    @threats ||= []
+  end
 
-    # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
-    def my_harvestable_trees
-      my_trees.select { |i, t| t[:size] >= 3 }.to_h
-    end
+  # @return [Hash]
+  def my_heroes
+    @my_heroes ||= {}
+  end
 
-    def my_size2_trees
-      my_trees.select { |i, t| t[:size] == 2 }.to_h
-    end
+  # @return [Hash]
+  def opp_heroes
+    @opp_heroes ||= {}
+  end
 
-    def my_size1_trees
-      my_trees.select { |i, t| t[:size] == 1 }.to_h
-    end
-
-    def my_seeds
-      my_trees.select { |i, t| t[:size] == 0 }.to_h
-    end
-
-    # @return [Set]
-    def actions
-      current_move[:actions]
-    end
-
-    # @return [String, nil] # use presence as indicator that seeding can take place
-    def first_seed_action
-      actions.find { |a| a.start_with?("SEED") }
-    end
+  def timeline
+    @timeline ||= []
+  end
 end
 
 class WorldInitializer
-  attr_reader :lines
-
   # @lines [Array<String>]
-  def initialize(lines)
-    @lines = lines
+  def initialize
   end
 
   # @return [Graph]
   def call
-    world_graph = ::Graph.new
-
-    to_delete = []
-
-    lines.each do |line|
-      debug("\"#{ line }\",")
-
-      index, richness, neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5 = line.split(" ").map(&:to_i)
-      neighbors = [neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5]
-
-      to_delete << index if richness < 1
-
-      neighbors.each do |neigh|
-        next if neigh.negative?
-
-        world_graph.ensure_bidirectional_connection!(index, neigh)
-        world_graph[index][:r] = richness
-      end
-    end
-
-    to_delete.each do |index|
-      world_graph.remove_node(index)
-      world_graph[index] = nil
-    end
-
-    world_graph
   end
+
+  private
+
+
 end
 
 require "set"
@@ -326,84 +310,64 @@ def debug(message)
   STDERR.puts(message)
 end
 
-number_of_cells = gets.to_i # 37
+MAX_X = 17_630
+MAX_Y = 9000
 
-world = {}
+HERO_MOVESPEED = 800 # 566, 566 in a 45% angle
+HERO_ATTACKRANGE = 800
 
-lines = []
-number_of_cells.times do
-  # index: 0 is the center cell, the next cells spiral outwards
-  # richness: 0 if the cell is unusable, 1-3 for usable cells
-  # neigh_0: the index of the neighbouring cell for each direction
-  lines << gets.chomp
+MONSTER_MOVESPEED = 400 # half that of a hero
+
+LAWN_RADIOUS = 5000
+BASE_RADIUS = 300
+
+def mound
+  return @mound if defined?(@mound)
+
+  if BASE_X.zero?
+    [4101, 4101]
+  else
+    [MAX_X - 4101, MAX_Y - 4101]
+  end
 end
 
-decider = Decider.new(world: WorldInitializer.new(lines).call)
+# Data that game has the bot read once. Stub whatever is given here in specs.
 
-timeline = {}
+# base_x: The corner of the map representing your base
+BASE_X, BASE_Y = gets.split.map(&:to_i)
+HEROES_PER_PLAYER = gets.to_i # Always 3
 
+decider = Decider.new
+
+# game loop
 loop do
-  day = gets.to_i # the game lasts 24 days: 0-23
-  nutrients = gets.to_i # the base score you gain from the next COMPLETE action
-  # sun: your sun points
-  # score: your current score
-  sun, score = gets.split(" ").map(&:to_i)
-  # opp_sun: opponent's sun points
-  # opp_score: opponent's score
-  # opp_is_waiting: whether your opponent is asleep until the next day
-  opp_sun, opp_score, opp_waiting = gets.split(" ")
-  opp_sun = opp_sun.to_i
-  opp_score = opp_score.to_i
-  opp_waiting = opp_waiting.to_i == 1
+  line = gets
+  debug(line)
+  # health: Your base health
+  # mana: Ignore in the first league; Spend ten mana to cast a spell
+  my_health, my_mana = line.split.map(&:to_i)
 
-  number_of_trees = gets.to_i # the current amount of trees
+  line = gets
+  debug(line)
+  # health: Your base health
+  # mana: Ignore in the first league; Spend ten mana to cast a spell
+  opp_health, opp_mana = line.split.map(&:to_i)
 
-  trees = {}
-  number_of_trees.times do
-    # cell_index: location of this tree
-    # size: size of this tree: 0-3
-    # is_mine: 1 if this is your tree
-    # is_dormant: 1 if this tree is dormant
-    cell_index, size, is_mine, is_dormant = gets.split(" ")
-    cell_index = cell_index.to_i
-    size = size.to_i
-    is_mine = is_mine.to_i == 1
-    is_dormant = is_dormant.to_i == 1
-    trees[cell_index] = {size: size, mine: is_mine, dormant: is_dormant}
+  lines = []
+
+  entity_count = gets.to_i # Amount of heros and monsters you can see
+
+  entity_count.times do
+    line = gets
+    debug(line)
+    lines << line
   end
-
-  number_of_possible_actions = gets.to_i # all legal actions
-
-  actions = Set.new
-  number_of_possible_actions.times do
-    actions << gets.chomp # try printing something from here to start with
-  end
-
-  # debug("day: #{ day }")
-  # debug("nutrients: #{ nutrients }")
-  # debug("my sun and score: #{ [sun, score] }")
-  # debug("opp sun, score and waiting: #{ [opp_sun, opp_score, opp_waiting] }")
-  # debug("trees: #{ number_of_trees }")
-  # trees.each_pair do |index, data|
-  #   debug("tree##{ index }: #{ data }")
-  # end
-  # debug("actions: #{ number_of_possible_actions }")
-  # actions.each do |action|
-  #   debug(action)
-  # end
 
   params = {
-    day: day, # the game lasts 24 days: 0-23
-    nutrients: nutrients,
-    sun: sun,
-    score: score,
-    opp_sun: opp_sun,
-    opp_score: opp_score,
-    opp_waiting: opp_waiting,
-    trees: trees,
-    actions: actions
+    health: my_health, mana: my_mana, opp_health: opp_health, opp_mana: opp_mana, lines: lines
   }
 
-  puts decider.move(params)
+  decider.call(params).select { |command| puts(command) }
+  #=> puts as many commands as I have heroes.
 end
 

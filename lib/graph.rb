@@ -60,6 +60,7 @@ class Graph
   def remove_node(node)
     structure[node][:incoming].each do |other_node|
       structure[other_node][:outgoing] -= [node]
+      structure[other_node][:incoming] -= [node]
     end
 
     structure.delete(node)

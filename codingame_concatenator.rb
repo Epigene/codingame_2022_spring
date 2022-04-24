@@ -11,6 +11,8 @@ concatenable_file_list_path = Pathname.new("./build_order.txt")
 output_path = Pathname.new("./codingame.rb")
 
 File.open(output_path, "w") do |file|
+  file.write("# Created at #{Time.now} \n")
+
   File.readlines(concatenable_file_list_path).each do |addable_file_path|
     addable_path = addable_file_path.chomp
     next if addable_path.to_s == ""

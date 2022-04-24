@@ -1,13 +1,7 @@
-number_of_cells = gets.to_i # 37
+# Data that game has the bot read once. Stub whatever is given here in specs.
 
-world = {}
+# base_x: The corner of the map representing your base
+BASE_X, BASE_Y = gets.split.map(&:to_i)
+HEROES_PER_PLAYER = gets.to_i # Always 3
 
-lines = []
-number_of_cells.times do
-  # index: 0 is the center cell, the next cells spiral outwards
-  # richness: 0 if the cell is unusable, 1-3 for usable cells
-  # neigh_0: the index of the neighbouring cell for each direction
-  lines << gets.chomp
-end
-
-decider = Decider.new(world: WorldInitializer.new(lines).call)
+decider = Decider.new

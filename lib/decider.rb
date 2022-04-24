@@ -1,139 +1,130 @@
+# The Decider
 class Decider
-  attr_reader :world, :timeline
-
-  LAST_DAY = 23
-
   # @world [Graph]
-  def initialize(world:)
-    @world = world
-    @timeline = []
+  def initialize
   end
 
-  # Takes in all data known at daybreak.
-  # Updates internal state and returns all moves we can reasonably make today.
-  #
-  # GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
-  # Growing:
-  #  - size1 -> 2: costs 3 + size 2 trees already owned.
-  #  - size2 -> 3: costs 7 + size 3 trees already owned.
-  #  - size3 -> harvest: 4 points
-  #
+  # @param step_info [Hash]
+  #  health: my_health, mana: my_mana, opp_health: opp_health, opp_mana: opp_mana, lines: lines
   # @return [Array<String>]
-  def move(params)
-    # day:,
-    # nutrients:,
-    # sun:,
-    # score:,
-    # opp_sun:,
-    # opp_score:,
-    # opp_waiting:,
-    # trees:,
-    # actions:
-    params.each_pair do |k, v|
-      debug("#{ k }: #{ v },")
-    end
-    timeline << params
+  def call(step_info)
+    update_gamestate!(step_info)
 
-    if begin_harvest?
-      actions.
-        select { |action| action.start_with?("COMPLETE") }.
-        min_by { |action| action.split(" ").last.to_i } ||
-          "WAIT hump, nothing to harvest"
-    elsif plant?
-      # plant_moving_to_center
-
-      binding.pry
-    elsif grow?
-      grow = nil
-
-      if can_afford?(:two_to3) && my_harvestable_trees.size < 2
-        inter = my_size2_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
-
-        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
-      end
-
-      if can_afford?(:one_to2) && my_size2_trees.size < 2
-        inter = my_size1_trees.keys.sort.map { |i| "GROW #{ i }" }.to_set & actions
-
-        grow = inter.sort_by { |a| a.split(" ").last.to_i }.first
-      end
-
-      grow || "WAIT"
+    if threats.any?
+      focus_on_closest_threat!
     else
-      "WAIT"
+      camp_at_mound!
     end
   end
 
-  def current_move
-    timeline.last
+  def update_gamestate!(step_info)
+    timeline << step_info
+    @monsters = {}
+    @threats = []
+
+    update_heroes!
+    update_monsters!
   end
 
   private
 
-    def begin_harvest?
-      current_move[:day] >= LAST_DAY || my_harvestable_trees.size >= 2 && sun >= 8
+  # @return [Array<String>]
+  def focus_on_closest_threat!
+    closest_threat_destination = Locator.location(threats[0])
+
+    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
+      mem << "MOVE #{closest_threat_destination[0]} #{closest_threat_destination[1]}"
     end
+  end
 
-    def grow?
-      my_harvestable_trees.size < 2 # && my_size2_trees.size < 2
+  # @return [Array<String>]
+  def camp_at_mound!
+    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
+      mem << "MOVE #{mound[0]} #{mound[1]}"
     end
+  end
 
-    def plant?
-      # for first days do nothing but seed
-      return true if current_move[:day] <= 18 && first_seed_action
-      return false if current_move[:day] >= LAST_DAY - 3
+  def params
+    timeline.last
+  end
 
-      false # or true?
-    end
+  def lines
+    params[:lines]
+  end
 
-    def can_afford?(mode) # :harvest
-      case mode
-      when :harvest
-        sun >= 4
-      when :two_to3
-        sun >= (7 + my_harvestable_trees.size)
-      when :one_to2
-        sun >= (3 + my_size2_trees.size)
-      when :plant
-        sun >= my_seeds.size
-      else
-        raise("mode '#{ mode }' not supported")
+  def update_heroes!
+    # lines.each do |line|
+    # end
+
+    # id: Unique identifier
+    # type: 0=monster, 1=your hero, 2=opponent hero
+    # x: Position of this entity
+    # shield_life: Ignore for this league; Count down until shield spell fades
+    # is_controlled: Ignore for this league; Equals 1 when this entity is under a control spell
+    # health: Remaining health of this monster
+    # vx/y: Trajectory of this monster
+    # near_base: 0=monster with no target yet, 1=monster targeting a base
+    # threat_for: Given this monster's trajectory, is it a threat to 1=your base, 2=your opponent's base, 0=neither
+
+    # id, type, x, y, shield_life, is_controlled, health, vx, vy, near_base, threat_for = line.split(" ").collect { |x| x.to_i }
+  end
+
+  MONSTER_LINE_REGEX = %r'^\d+ 0'.freeze
+
+  def update_monsters!
+    lines.cycle(1) do |line|
+      next unless line.match?(MONSTER_LINE_REGEX)
+
+      id, _type, x, y, shield, is_controlled, health, vx, vy, near_base, threat_for = line.split.map(&:to_i)
+
+      data = {
+        id: id,
+        x: x,
+        y: y,
+        shield: shield,
+        is_controlled: is_controlled,
+        health: health,
+        vx: vx,
+        vy: vy,
+        near_base: near_base,
+        threat_for: threat_for
+      }
+
+      monsters[id] = data
+
+      if threat_for == 1
+        index =
+          threats.bsearch_index do |middle_threat, _|
+            Locator.distance_to_base(middle_threat) > Locator.distance_to_base(data)
+          end
+
+        index = -1 if index.nil?
+
+        threats.insert(index, data)
       end
     end
+  end
 
-    def sun
-      current_move[:sun]
-    end
+  def monsters
+    @monsters ||= {}
+  end
 
-    # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
-    def my_trees
-      current_move[:trees].select { |i, t| t[:mine] }.to_h
-    end
+  # monsters who actually move towards the base, sorted ascending by distance from the base
+  def threats
+    @threats ||= []
+  end
 
-    # @return [Hash] {1 => {:size=>1, :mine=>true, :dormant=>false}}
-    def my_harvestable_trees
-      my_trees.select { |i, t| t[:size] >= 3 }.to_h
-    end
+  # @return [Hash]
+  def my_heroes
+    @my_heroes ||= {}
+  end
 
-    def my_size2_trees
-      my_trees.select { |i, t| t[:size] == 2 }.to_h
-    end
+  # @return [Hash]
+  def opp_heroes
+    @opp_heroes ||= {}
+  end
 
-    def my_size1_trees
-      my_trees.select { |i, t| t[:size] == 1 }.to_h
-    end
-
-    def my_seeds
-      my_trees.select { |i, t| t[:size] == 0 }.to_h
-    end
-
-    # @return [Set]
-    def actions
-      current_move[:actions]
-    end
-
-    # @return [String, nil] # use presence as indicator that seeding can take place
-    def first_seed_action
-      actions.find { |a| a.start_with?("SEED") }
-    end
+  def timeline
+    @timeline ||= []
+  end
 end

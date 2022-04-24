@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require "codinbot/version"
-require "graph"
+# require "graph"
 require "world_initializer"
+require "locator"
 require "decider"
 require "game_header"
 

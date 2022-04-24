@@ -1,4 +1,5 @@
 lib/graph.rb
+lib/locator.rb
 lib/decider.rb
 lib/world_initializer.rb
 lib/game_header.rb
