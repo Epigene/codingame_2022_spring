@@ -11,19 +11,17 @@ MAX_X = 17_630
 MAX_Y = 9000
 
 HERO_MOVESPEED = 800 # 566, 566 in a 45% angle
+HERO_SIGHT = 2200
 HERO_ATTACKRANGE = 800
 
 MONSTER_MOVESPEED = 400 # half that of a hero
 
 LAWN_RADIOUS = 5000
+BASE_SIGHT = 6000
 BASE_RADIUS = 300
 
-def mound
-  return @mound if defined?(@mound)
+WIND_CASTRANGE = 1280
+WIND_PUSH = 2200
 
-  if BASE_X.zero?
-    [4101, 4101]
-  else
-    [MAX_X - 4101, MAX_Y - 4101]
-  end
-end
+SHIELD_CASTRANGE = 2200
+CONTROL_CASTRANGE = 2200

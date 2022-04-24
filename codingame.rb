@@ -1,4 +1,4 @@
-# Created at 2022-04-24 14:39:53 +0300 
+# Created at 2022-04-24 18:01:14 +0300 
 # Implements a directionless and weightless graph structure with named nodes
 class Graph
   # Key data storage.
@@ -154,6 +154,94 @@ module Locator
   def self.destination(threat)
     [threat[:x] + threat[:vx], threat[:y] + threat[:vy]]
   end
+
+  # @params threat [Hash] # must have
+  def self.location(threat)
+    [threat[:x], threat[:y]]
+  end
+
+  # @param caster [Hash] # a hero hash
+  # @param distance [Integer] how far to look
+  # @param monsters [Hash<Hash>] an id-keyed repo of monster data
+  #
+  # @return [Array<Hash>]
+  def self.monsters_in_cast_range(caster:, monsters:, distance:)
+    monsters.each_pair.with_object([]) do |(_k, monster), mem|
+      mem << monster if distance_between(caster, monster) <= distance
+    end
+  end
+
+  def self.distance_between(thing1, thing2)
+    dist_x = (thing1[:x] - thing2[:x]).abs
+    dist_y = (thing1[:y] - thing2[:y]).abs
+
+    Math.sqrt((dist_x**2) + (dist_y**2)).round
+  end
+
+  # @return [Array<x, y>]
+  def self.mound
+    @mound ||=
+      if BASE_X.zero?
+        [4101, 4101]
+      else
+        [MAX_X - 4101, MAX_Y - 4101]
+      end
+  end
+
+  # @return [Array<x, y>]
+  def self.opp_base
+    @opp_base ||=
+      if BASE_X.zero?
+        [MAX_X, MAX_Y]
+      else
+        [1, 1]
+      end
+  end
+end
+
+# Knows everything about what moves make sense given a hero's location.
+# :move is always available and implicit.
+# There are two dimensions - distance from base, and distance to opponent base.
+# Ranges for :wind
+#   [0-3721] :wind is OK since any monsters in range are by definition on lawn
+#   [3722-6279] :wind is possible, but monsters must be checked for range and being on lawn (4999)
+#   [6280) no :wind
+#
+# Ranged for :control
+#   [7200) can :control freely
+
+class Cap
+  def self.call(hero)
+    @cache ||= {}
+
+    return @cache[hero] if @cache[hero]
+
+    instance = new(hero)
+
+    @cache[hero] = instance
+  end
+
+  # @return [Set] :control_opp, :control, :wind, :shield
+  def moves
+    return @moves if defined?(@moves)
+
+    @moves = [:shield].to_set
+
+    distance_to_base = Locator.distance_to_base(@hero)
+    # distance_to_opp_base = TODO
+
+    @moves << :wind if (0..6279).include?(distance_to_base)
+    @moves << :control_opp if (0..4000).include?(distance_to_base)
+    @moves << :control if (7200..).include?(distance_to_base)
+
+    @moves
+  end
+
+  private
+
+  def initialize(hero)
+    @hero = hero
+  end
 end
 
 # The Decider
@@ -168,15 +256,27 @@ class Decider
   def call(step_info)
     update_gamestate!(step_info)
 
+    # if hero1 on lawn, there's no monsters, but an opponent hero is controllable - do it
+    # if @commands[0].nil? && params[:mana] >= 10 && Cap.call(hero1).on_lawn? && Cap.call(hero1).moves.include?(:control) && ()
+
+    # end
+
+    # if hero1 on lawn, can cast :wind and there's monsters, - do it
+    hero1_push_monsters_off_lawn? &&
+      @commands[0] = "SPELL WIND #{Locator.opp_base[0]} #{Locator.opp_base[1]}"
+
     if threats.any?
       focus_on_closest_threat!
     else
       camp_at_mound!
     end
+
+    @commands
   end
 
   def update_gamestate!(step_info)
     timeline << step_info
+    @commands = Array.new(HEROES_PER_PLAYER)
     @monsters = {}
     @threats = []
 
@@ -186,19 +286,27 @@ class Decider
 
   private
 
+  def hero1_push_monsters_off_lawn?
+    @commands[0].nil? && params[:mana] >= 10 &&
+      Cap.call(hero1).moves.include?(:wind) &&
+      Locator.monsters_in_cast_range(caster: hero1, monsters: monsters, distance: WIND_CASTRANGE).any?
+  end
+
   # @return [Array<String>]
   def focus_on_closest_threat!
-    closest_threat_destination = Locator.destination(threats[0])
+    closest_threat_location = Locator.location(threats[0])
 
-    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
-      mem << "MOVE #{closest_threat_destination[0]} #{closest_threat_destination[1]}"
+    HEROES_PER_PLAYER.times do |i|
+      @commands[i] ||= "MOVE #{closest_threat_location[0]} #{closest_threat_location[1]}"
     end
   end
 
   # @return [Array<String>]
   def camp_at_mound!
-    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
-      mem << "MOVE #{mound[0]} #{mound[1]}"
+    m = Locator.mound
+
+    HEROES_PER_PLAYER.times do |i|
+      @commands[i] ||= "MOVE #{m[0]} #{m[1]}"
     end
   end
 
@@ -211,20 +319,40 @@ class Decider
   end
 
   def update_heroes!
-    # lines.each do |line|
-    # end
+    lines.cycle(1) do |line|
+      next if line.match?(MONSTER_LINE_REGEX)
 
-    # id: Unique identifier
-    # type: 0=monster, 1=your hero, 2=opponent hero
-    # x: Position of this entity
-    # shield_life: Ignore for this league; Count down until shield spell fades
-    # is_controlled: Ignore for this league; Equals 1 when this entity is under a control spell
-    # health: Remaining health of this monster
-    # vx/y: Trajectory of this monster
-    # near_base: 0=monster with no target yet, 1=monster targeting a base
-    # threat_for: Given this monster's trajectory, is it a threat to 1=your base, 2=your opponent's base, 0=neither
+      id, type, x, y, shield, charmed, _whatever = line.split.map(&:to_i)
 
-    # id, type, x, y, shield_life, is_controlled, health, vx, vy, near_base, threat_for = line.split(" ").collect { |x| x.to_i }
+      data = {
+        id: id,
+        x: x,
+        y: y,
+        shield: shield,
+        charmed: charmed == 1,
+      }
+
+      if type == 1
+        my_heroes[id] = data
+      else
+        opp_heroes[id] = data
+      end
+    end
+  end
+
+  def hero1
+    @hero1_index ||= BASE_X.zero? ? 0 : 3
+    my_heroes[@hero1_index]
+  end
+
+  def hero2
+    @hero2_index ||= BASE_X.zero? ? 1 : 4
+    my_heroes[@hero2_index]
+  end
+
+  def hero3
+    @hero3_index ||= BASE_X.zero? ? 2 : 5
+    my_heroes[@hero3_index]
   end
 
   MONSTER_LINE_REGEX = %r'^\d+ 0'.freeze
@@ -233,19 +361,19 @@ class Decider
     lines.cycle(1) do |line|
       next unless line.match?(MONSTER_LINE_REGEX)
 
-      id, _type, x, y, shield, is_controlled, health, vx, vy, near_base, threat_for = line.split.map(&:to_i)
+      id, _type, x, y, shield, charmed, health, vx, vy, near_base, threat_for = line.split.map(&:to_i)
 
       data = {
         id: id,
         x: x,
         y: y,
         shield: shield,
-        is_controlled: is_controlled,
+        charmed: charmed,
         health: health,
         vx: vx,
         vy: vy,
         near_base: near_base,
-        threat_for: threat_for
+        threat_for: threat_for,
       }
 
       monsters[id] = data
@@ -314,22 +442,20 @@ MAX_X = 17_630
 MAX_Y = 9000
 
 HERO_MOVESPEED = 800 # 566, 566 in a 45% angle
+HERO_SIGHT = 2200
 HERO_ATTACKRANGE = 800
 
 MONSTER_MOVESPEED = 400 # half that of a hero
 
 LAWN_RADIOUS = 5000
+BASE_SIGHT = 6000
 BASE_RADIUS = 300
 
-def mound
-  return @mound if defined?(@mound)
+WIND_CASTRANGE = 1280
+WIND_PUSH = 2200
 
-  if BASE_X.zero?
-    [4101, 4101]
-  else
-    [MAX_X - 4101, MAX_Y - 4101]
-  end
-end
+SHIELD_CASTRANGE = 2200
+CONTROL_CASTRANGE = 2200
 
 # Data that game has the bot read once. Stub whatever is given here in specs.
 
@@ -342,13 +468,13 @@ decider = Decider.new
 # game loop
 loop do
   line = gets
-  debug(line)
+  # debug(line)
   # health: Your base health
   # mana: Ignore in the first league; Spend ten mana to cast a spell
   my_health, my_mana = line.split.map(&:to_i)
 
   line = gets
-  debug(line)
+  # debug(line)
   # health: Your base health
   # mana: Ignore in the first league; Spend ten mana to cast a spell
   opp_health, opp_mana = line.split.map(&:to_i)

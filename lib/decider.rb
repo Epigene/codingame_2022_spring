@@ -10,15 +10,27 @@ class Decider
   def call(step_info)
     update_gamestate!(step_info)
 
+    # if hero1 on lawn, there's no monsters, but an opponent hero is controllable - do it
+    # if @commands[0].nil? && params[:mana] >= 10 && Cap.call(hero1).on_lawn? && Cap.call(hero1).moves.include?(:control) && ()
+
+    # end
+
+    # if hero1 on lawn, can cast :wind and there's monsters, - do it
+    hero1_push_monsters_off_lawn? &&
+      @commands[0] = "SPELL WIND #{Locator.opp_base[0]} #{Locator.opp_base[1]}"
+
     if threats.any?
       focus_on_closest_threat!
     else
       camp_at_mound!
     end
+
+    @commands
   end
 
   def update_gamestate!(step_info)
     timeline << step_info
+    @commands = Array.new(HEROES_PER_PLAYER)
     @monsters = {}
     @threats = []
 
@@ -28,19 +40,27 @@ class Decider
 
   private
 
+  def hero1_push_monsters_off_lawn?
+    @commands[0].nil? && params[:mana] >= 10 &&
+      Cap.call(hero1).moves.include?(:wind) &&
+      Locator.monsters_in_cast_range(caster: hero1, monsters: monsters, distance: WIND_CASTRANGE).any?
+  end
+
   # @return [Array<String>]
   def focus_on_closest_threat!
-    closest_threat_destination = Locator.location(threats[0])
+    closest_threat_location = Locator.location(threats[0])
 
-    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
-      mem << "MOVE #{closest_threat_destination[0]} #{closest_threat_destination[1]}"
+    HEROES_PER_PLAYER.times do |i|
+      @commands[i] ||= "MOVE #{closest_threat_location[0]} #{closest_threat_location[1]}"
     end
   end
 
   # @return [Array<String>]
   def camp_at_mound!
-    HEROES_PER_PLAYER.times.with_object([]) do |_i, mem|
-      mem << "MOVE #{mound[0]} #{mound[1]}"
+    m = Locator.mound
+
+    HEROES_PER_PLAYER.times do |i|
+      @commands[i] ||= "MOVE #{m[0]} #{m[1]}"
     end
   end
 
@@ -53,20 +73,40 @@ class Decider
   end
 
   def update_heroes!
-    # lines.each do |line|
-    # end
+    lines.cycle(1) do |line|
+      next if line.match?(MONSTER_LINE_REGEX)
 
-    # id: Unique identifier
-    # type: 0=monster, 1=your hero, 2=opponent hero
-    # x: Position of this entity
-    # shield_life: Ignore for this league; Count down until shield spell fades
-    # is_controlled: Ignore for this league; Equals 1 when this entity is under a control spell
-    # health: Remaining health of this monster
-    # vx/y: Trajectory of this monster
-    # near_base: 0=monster with no target yet, 1=monster targeting a base
-    # threat_for: Given this monster's trajectory, is it a threat to 1=your base, 2=your opponent's base, 0=neither
+      id, type, x, y, shield, charmed, _whatever = line.split.map(&:to_i)
 
-    # id, type, x, y, shield_life, is_controlled, health, vx, vy, near_base, threat_for = line.split(" ").collect { |x| x.to_i }
+      data = {
+        id: id,
+        x: x,
+        y: y,
+        shield: shield,
+        charmed: charmed == 1,
+      }
+
+      if type == 1
+        my_heroes[id] = data
+      else
+        opp_heroes[id] = data
+      end
+    end
+  end
+
+  def hero1
+    @hero1_index ||= BASE_X.zero? ? 0 : 3
+    my_heroes[@hero1_index]
+  end
+
+  def hero2
+    @hero2_index ||= BASE_X.zero? ? 1 : 4
+    my_heroes[@hero2_index]
+  end
+
+  def hero3
+    @hero3_index ||= BASE_X.zero? ? 2 : 5
+    my_heroes[@hero3_index]
   end
 
   MONSTER_LINE_REGEX = %r'^\d+ 0'.freeze
@@ -75,19 +115,19 @@ class Decider
     lines.cycle(1) do |line|
       next unless line.match?(MONSTER_LINE_REGEX)
 
-      id, _type, x, y, shield, is_controlled, health, vx, vy, near_base, threat_for = line.split.map(&:to_i)
+      id, _type, x, y, shield, charmed, health, vx, vy, near_base, threat_for = line.split.map(&:to_i)
 
       data = {
         id: id,
         x: x,
         y: y,
         shield: shield,
-        is_controlled: is_controlled,
+        charmed: charmed,
         health: health,
         vx: vx,
         vy: vy,
         near_base: near_base,
-        threat_for: threat_for
+        threat_for: threat_for,
       }
 
       monsters[id] = data

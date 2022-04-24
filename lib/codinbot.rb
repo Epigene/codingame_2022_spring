@@ -3,6 +3,7 @@
 # require "graph"
 require "world_initializer"
 require "locator"
+require "cap"
 require "decider"
 require "game_header"
 
